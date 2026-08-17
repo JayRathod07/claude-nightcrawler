@@ -1,0 +1,54 @@
+[Unit]
+Description=Claude Nightcrawler — Web Dashboard (FastAPI)
+Documentation=https://github.com/JayRathod07/claude-nightcrawler
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+# ── Identity ────────────────────────────────────────────────────────────────
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/claude-agent
+
+# ── Environment ──────────────────────────────────────────────────────────────
+EnvironmentFile=/opt/claude-agent/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# ── Process ──────────────────────────────────────────────────────────────────
+# Bind to localhost only — Caddy reverse-proxies from 443 → 8000
+ExecStart=/opt/claude-agent/venv/bin/uvicorn \
+    src.dashboard:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1 \
+    --log-level info \
+    --access-log \
+    --proxy-headers \
+    --forwarded-allow-ips="127.0.0.1"
+
+# ── Restart policy ───────────────────────────────────────────────────────────
+Restart=on-failure
+RestartSec=10
+RestartSteps=5
+RestartMaxDelaySec=120
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+StandardOutput=append:/opt/claude-agent/logs/dashboard.log
+StandardError=append:/opt/claude-agent/logs/dashboard.log
+SyslogIdentifier=claude-dashboard
+
+# ── Resource limits ──────────────────────────────────────────────────────────
+MemoryMax=512M
+CPUQuota=50%
+
+# ── Security hardening ───────────────────────────────────────────────────────
+ReadWritePaths=/opt/claude-agent
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

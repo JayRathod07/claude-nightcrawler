@@ -1,110 +1,203 @@
-# Architecture
+# Architecture — Claude Nightcrawler
 
-## System Overview
+Technical architecture, data flow, and component design.
 
-Claude Nightcrawler is a multi-process Python application:
+---
 
-1. **Dashboard Process** — FastAPI web server (Uvicorn)
-2. **Worker Process** — Infinite loop polling SQLite for tasks
-3. **Caddy** — Reverse proxy with auto HTTPS
-
-## Component Diagram
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    SYSTEM ARCHITECTURE FLOW                         │
-└─────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│                    SYSTEM ARCHITECTURE                         │
+└────────────────────────────────────────────────────────────────┘
 
-    [User Device: Phone/Laptop/Tablet]
-                    │
-              HTTPS (Port 443)
-                    │
-         ┌──────────▼──────────┐
-         │   DuckDNS Service   │ ◄── Periodic IP update (cron)
-         └──────────┬──────────┘
-                    │
-         ┌──────────▼──────────┐
-         │   Caddy Web Server  │ ◄── Auto SSL/TLS (Let's Encrypt)
-         │   Reverse Proxy     │
-         └──────────┬──────────┘
-                    │
-              Port 8000 (localhost)
-                    │
-         ┌──────────▼──────────────┐
-         │  FastAPI Dashboard      │
-         │  • HTTP Basic Auth      │
-         │  • Jinja2 Templates     │
-         │  • REST API Endpoints   │
-         └──────────┬──────────────┘
-                    │
-         ┌──────────▼──────────────┐
-         │   SQLite Database       │
-         │   • tasks table         │
-         │   • claude_status       │
-         │   • execution_log       │
-         └─────┬──────────────▲────┘
-               │              │
-               │  Read/Write  │
-         ┌─────▼──────────────┴────┐
-         │  Agent Worker Process   │
-         │  • Infinite task loop   │
-         │  • State recovery       │
-         │  • Error handling       │
-         └──────────┬──────────────┘
-                    │
-         ┌──────────▼──────────────┐
-         │  Playwright Controller  │
-         │  • Persistent context   │
-         │  • Session management   │
-         └──────────┬──────────────┘
-                    │
-              Browser Profile (cookies persist)
-                    │
-         ┌──────────▼──────────────┐
-         │    claude.ai Website    │
-         └─────────────────────────┘
+  [User: Phone / Laptop / Tablet]
+              │
+        HTTPS (port 443)
+              │
+  ┌───────────▼───────────┐
+  │     DuckDNS Service   │ ◄── cron every 5 min (duckdns-update.sh)
+  └───────────┬───────────┘
+              │ Dynamic DNS → Oracle Cloud Public IP
+  ┌───────────▼───────────┐
+  │    Caddy Web Server   │ ◄── Auto TLS (Let's Encrypt)
+  │    Reverse Proxy      │     Security headers / HSTS
+  └───────────┬───────────┘
+              │ localhost:8000
+  ┌───────────▼──────────────────┐
+  │   FastAPI Dashboard          │
+  │   • HTTP Basic Auth          │
+  │   • Jinja2 HTML templates    │
+  │   • REST API (/api/*)        │
+  │   • Static assets            │
+  └───────────┬──────────────────┘
+              │ SQLite WAL (read)
+  ┌───────────▼──────────────────┐    ┌──────────────────────────┐
+  │     SQLite Database          │◄───│   Agent Worker Process   │
+  │     • tasks                  │    │   • Infinite task loop   │
+  │     • claude_status          │───►│   • Retry / backoff      │
+  │     • task_events            │    │   • Crash recovery       │
+  │     WAL mode (concurrent R/W)│    │   • Result file save     │
+  └──────────────────────────────┘    └───────────┬──────────────┘
+                                                  │
+                                      ┌───────────▼──────────────┐
+                                      │  Playwright Controller   │
+                                      │  • Persistent browser    │
+                                      │  • Chromium (headless)   │
+                                      │  • Session cookies saved │
+                                      └───────────┬──────────────┘
+                                                  │  HTTPS
+                                      ┌───────────▼──────────────┐
+                                      │     claude.ai website    │
+                                      └──────────────────────────┘
 ```
 
-## Database Schema
+---
 
-### tasks
-Stores all user-submitted prompts and their lifecycle state.
+## Components
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER PK | Auto-incrementing task ID |
-| prompt | TEXT | User's prompt text |
-| status | TEXT | queued/running/completed/waiting_limit/failed |
-| priority | INTEGER | Higher = processed sooner |
-| created_at | TIMESTAMP | When task was submitted |
-| started_at | TIMESTAMP | When worker began processing |
-| completed_at | TIMESTAMP | When task finished |
-| result_path | TEXT | Path to saved .md file |
-| error_message | TEXT | Error details if failed |
-| retry_count | INTEGER | How many times retried |
-| max_retries | INTEGER | Retry limit |
-| limit_reset_time | TIMESTAMP | When to retry after limit |
-| metadata | TEXT | JSON for future extensibility |
+### `src/database.py` — Data Layer
+- **SQLite WAL mode**: allows concurrent reads from dashboard while worker writes
+- **Thread-safe**: uses `threading.local()` connections with `check_same_thread=False`
+- **Schema**: `tasks` table with status FSM, `claude_status` singleton, `task_events` audit log
+- **Crash recovery**: `recover_stale_tasks()` resets any `running` tasks to `queued` on startup
 
-### claude_status
-Singleton row tracking Claude.ai rate limit state.
+### `src/claude_adapter.py` — Browser Automation
+- **Playwright persistent context**: browser profile stored in `browser_data/` — cookies survive restarts
+- **Limit detection**: regex patterns against response text (`usage limit`, `resets in`, etc.)
+- **Reset time extraction**: multiple formats (relative hours/minutes, absolute time)
+- **Error screenshots**: saved to `logs/screenshots/` on failures for post-mortem debugging
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER (=1) | Singleton key |
-| available | BOOLEAN | Can accept requests? |
-| reset_time | TIMESTAMP | When limit lifts |
-| last_check | TIMESTAMP | Last status check |
-| last_limit_message | TEXT | Raw limit message |
-| total_requests_today | INTEGER | Daily counter |
+### `src/agent_worker.py` — Task Processor
+- **Single-threaded loop**: processes one task at a time (Claude.ai only allows one active conversation)
+- **Exponential backoff**: doubles delay up to 120s on network/browser errors
+- **SIGTERM handler**: sets shutdown flag — in-progress task completes gracefully before exit
+- **Result files**: saved as Markdown with YAML frontmatter to `results/task_NNN.md`
 
-### execution_log
-Full audit trail of task lifecycle events.
+### `src/dashboard.py` — Web Interface (FastAPI)
+- **Authentication**: `fastapi.security.HTTPBasic` with `secrets.compare_digest` for timing-safe comparison
+- **Lifespan context**: `init_db()` called once at startup via `@asynccontextmanager`
+- **Jinja2 templates**: `TemplateResponse(request, "dashboard.html", context)` with custom filters
+- **REST endpoints**: `/api/tasks`, `/api/stats`, `/api/status` polled by JS every 8–15s
+- **Download**: `/results/{task_id}` streams the Markdown file as an attachment
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | INTEGER PK | Log entry ID |
-| task_id | INTEGER FK | Reference to tasks.id |
-| event_type | TEXT | started/completed/failed/retried/limit_hit |
-| event_time | TIMESTAMP | When event occurred |
-| details | TEXT | Human-readable details |
+### `src/auth.py` — Authentication
+- `bcrypt` password hashing for `ADMIN_PASSWORD` (stored in `.env`)
+- `HTTPBasic` dependency injected into all routes
+- Timing-safe comparison prevents username enumeration
+
+---
+
+## Data Flow
+
+### Task Submission
+
+```
+User fills form ──POST /tasks──► Dashboard validates
+                                      │
+                                 database.add_task()
+                                      │
+                              tasks table: status='queued'
+                                      │
+                         Agent worker polls get_next_task()
+                                      │
+                              status ← 'running'
+                                      │
+                           claude_adapter.send_prompt()
+                                      │
+                              status ← 'completed'
+                              result_path saved
+                                      │
+                         Dashboard polls /api/tasks every 8s
+                                      │
+                         User sees status update + Download button
+```
+
+### Rate Limit Handling
+
+```
+Claude.ai returns limit message
+          │
+  _is_limit_message() → True
+          │
+  _extract_reset_time() → datetime
+          │
+  database.set_claude_unavailable(reset_time)
+          │
+  Worker: wait_for_limit_reset()
+          │ polls every 60s
+          │ checks if now > reset_time
+          │
+  database.set_claude_available()
+          │
+  Worker resumes normal loop
+```
+
+---
+
+## Task State Machine
+
+```
+               ┌─────────┐
+     Submit    │         │
+  ────────────►│  queued │
+               │         │
+               └────┬────┘
+                    │ worker picks up
+               ┌────▼────┐
+               │         │
+               │ running │
+               │         │
+               └────┬────┘
+                    │
+        ┌───────────┼───────────┐
+        │           │           │
+   ┌────▼────┐ ┌────▼──────┐ ┌─▼──────────────┐
+   │completed│ │  failed   │ │ waiting_limit  │
+   │         │ │  (retries │ │ (auto-resumes) │
+   │         │ │exhausted) │ │                │
+   └─────────┘ └───────────┘ └────────────────┘
+```
+
+---
+
+## File Structure
+
+```
+/opt/claude-agent/
+├── .env                    # Secrets (chmod 600)
+├── requirements.txt
+├── src/
+│   ├── database.py         # SQLite data layer
+│   ├── claude_adapter.py   # Playwright automation
+│   ├── agent_worker.py     # Main worker loop
+│   ├── dashboard.py        # FastAPI web app
+│   └── auth.py             # HTTP Basic Auth
+├── templates/
+│   └── dashboard.html      # Jinja2 template
+├── static/
+│   ├── css/main.css        # Liquid Glass UI
+│   └── js/dashboard.js     # Live polling / interactions
+├── scripts/
+│   ├── setup.sh            # Automated server setup
+│   ├── deploy.sh           # Rolling update script
+│   ├── backup.sh           # Database backup
+│   ├── manual_login.py     # One-time Claude login helper
+│   ├── morning_report.py   # Daily summary
+│   └── health_check.py     # Health verification
+├── config/
+│   ├── Caddyfile           # Reverse proxy + HTTPS
+│   ├── claude-agent.service
+│   ├── claude-dashboard.service
+│   └── duckdns-update.sh
+├── data/
+│   └── nightcrawler.db     # SQLite database
+├── results/                # Claude response Markdown files
+├── backups/                # Database snapshots
+├── browser_data/           # Playwright persistent profile
+└── logs/
+    ├── worker.log
+    ├── dashboard.log
+    ├── duckdns.log
+    └── screenshots/        # Error screenshots from Playwright
+```

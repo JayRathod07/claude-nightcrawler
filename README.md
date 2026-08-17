@@ -6,7 +6,8 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Playwright](https://img.shields.io/badge/Playwright-1.40-45ba4b?style=for-the-badge&logo=playwright&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-131%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-166%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
+![Caddy](https://img.shields.io/badge/Caddy-2.x-1F88C0?style=for-the-badge&logo=caddy&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
 
 **A self-hosted, zero-cost automation agent that runs 24/7 on Oracle Cloud Free Tier.**  
@@ -303,9 +304,37 @@ On 5 consecutive failures: 60s circuit-breaker pause
 | 1 | Database layer (`database.py`) | ✅ Complete | 45 ✅ |
 | 2 | Claude adapter (`claude_adapter.py`) | ✅ Complete | 55 ✅ |
 | 3 | Agent worker (`agent_worker.py`) | ✅ Complete | 31 ✅ |
-| 4 | Web dashboard (`dashboard.py` + templates) | 🔜 Next | — |
-| 5 | Deployment (systemd + Caddy + setup.sh) | 🔜 Planned | — |
+| 4 | Web dashboard (`dashboard.py` + templates) | ✅ Complete | 35 ✅ |
+| 5 | Infrastructure & Deployment (systemd + Caddy + setup.sh) | ✅ Complete | — |
+| UI | Liquid Glass premium UI upgrade | ✅ Complete | — |
 | 6 | Notifications & monitoring (Telegram, morning report) | ✅ Complete | — |
+
+**Total: 166 / 166 tests passing** 🟢
+
+---
+
+## 🚀 Quick Deployment
+
+```bash
+# 1. Clone on your Oracle Cloud server
+git clone https://github.com/JayRathod07/claude-nightcrawler.git
+cd claude-nightcrawler
+
+# 2. Configure secrets
+cp .env.example .env
+nano .env   # set ADMIN_PASSWORD, DOMAIN_NAME, DUCKDNS_TOKEN
+
+# 3. Run automated setup (installs Python, Playwright, Caddy, systemd)
+chmod +x scripts/setup.sh
+sudo ./scripts/setup.sh
+
+# 4. One-time Claude login
+source venv/bin/activate
+python scripts/manual_login.py
+
+# 5. Access your dashboard
+# https://your-agent.duckdns.org
+```
 
 ---
 
@@ -325,9 +354,13 @@ On 5 consecutive failures: 60s circuit-breaker pause
 
 | Doc | Description |
 |-----|-------------|
-| [Setup Guide](docs/setup-guide.md) | Step-by-step Ubuntu deployment |
-| [Architecture](docs/architecture.md) | Component diagram & DB schema |
+| [Setup Guide](docs/setup-guide.md) | Step-by-step Oracle Cloud deployment |
+| [Deployment Guide](docs/deployment.md) | Service management, updates, backups |
+| [Architecture](docs/architecture.md) | Component diagram & data flow |
+| [API Reference](docs/api-reference.md) | REST API endpoints & schemas |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues & fixes |
+| [Contributing](docs/contributing.md) | Development setup & PR process |
+| [Security](docs/security.md) | Security architecture & best practices |
 
 ---
 
@@ -339,6 +372,9 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## 🤝 Contributing
 
-Contributions welcome! Please open an issue first to discuss changes.  
-Bug reports → use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md)  
-Feature requests → use the [feature request template](.github/ISSUE_TEMPLATE/feature_request.md)
+Contributions welcome! See [docs/contributing.md](docs/contributing.md) for full guidelines.
+
+Bug reports → [bug report template](.github/ISSUE_TEMPLATE/bug_report.md)  
+Feature requests → [feature request template](.github/ISSUE_TEMPLATE/feature_request.md)
+
+Please run `pytest tests/ -v` (all 166 tests must pass) before submitting a PR.

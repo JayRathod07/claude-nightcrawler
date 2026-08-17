@@ -1,0 +1,59 @@
+[Unit]
+Description=Claude Nightcrawler — Agent Worker
+Documentation=https://github.com/JayRathod07/claude-nightcrawler
+After=network.target network-online.target
+Wants=network-online.target
+# Ensure dashboard is up before worker starts
+After=claude-dashboard.service
+
+[Service]
+# ── Identity ────────────────────────────────────────────────────────────────
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/claude-agent
+
+# ── Environment ──────────────────────────────────────────────────────────────
+EnvironmentFile=/opt/claude-agent/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# ── Process ──────────────────────────────────────────────────────────────────
+ExecStart=/opt/claude-agent/venv/bin/python -m src.agent_worker
+ExecStop=/bin/kill -SIGTERM $MAINPID
+
+# ── Restart policy ───────────────────────────────────────────────────────────
+# Restart on any failure; back off up to 5 minutes between retries
+Restart=on-failure
+RestartSec=30
+RestartSteps=5
+RestartMaxDelaySec=300
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+StandardOutput=append:/opt/claude-agent/logs/worker.log
+StandardError=append:/opt/claude-agent/logs/worker.log
+SyslogIdentifier=claude-agent
+
+# ── Resource limits ──────────────────────────────────────────────────────────
+# Prevent OOM kill; Playwright + Chromium need headroom
+MemoryMax=1.5G
+# Protect against accidental runaway
+CPUQuota=80%
+
+# ── Security hardening ───────────────────────────────────────────────────────
+# Allow writing to project dir and /tmp only (browser needs /tmp)
+ReadWritePaths=/opt/claude-agent /tmp
+NoNewPrivileges=true
+PrivateTmp=false        # Playwright needs real /tmp for Chromium IPC
+ProtectSystem=full
+# Chromium needs /dev/shm for GPU shader cache
+DevicePolicy=closed
+DeviceAllow=/dev/null rw
+DeviceAllow=/dev/shm rw
+
+# ── Watchdog ─────────────────────────────────────────────────────────────────
+# If the process stops sending keepalive for 10 minutes, restart
+WatchdogSec=600
+
+[Install]
+WantedBy=multi-user.target

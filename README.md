@@ -6,7 +6,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Playwright](https://img.shields.io/badge/Playwright-1.40-45ba4b?style=for-the-badge&logo=playwright&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-265%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
+![Tests](https://img.shields.io/badge/Tests-279%20passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)
 ![Caddy](https://img.shields.io/badge/Caddy-2.x-1F88C0?style=for-the-badge&logo=caddy&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
 
@@ -309,8 +309,9 @@ On 5 consecutive failures: 60s circuit-breaker pause
 | UI | Liquid Glass premium UI upgrade | ✅ Complete | — |
 | 6 | Notifications & monitoring (Telegram, morning report, health) | ✅ Complete | 31 ✅ |
 | 7 | Testing & QA (integration, load, auth/utils unit tests) | ✅ Complete | 68 ✅ |
+| 8 | Documentation (8 comprehensive docs in `docs/`) | ✅ Complete | — |
 
-**Total: 265 / 265 tests passing** 🟢
+**Total: 279 / 279 tests passing** 🟢 (265 core + 14 load)
 
 ---
 

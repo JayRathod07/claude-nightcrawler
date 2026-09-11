@@ -82,7 +82,7 @@ if [[ "$INSTALL_DIR" != "$PROJECT_DIR" ]]; then
     log "Project files copied to $INSTALL_DIR"
 fi
 
-mkdir -p "$INSTALL_DIR"/{logs,results,browser_data,logs/screenshots}
+mkdir -p "$INSTALL_DIR"/{data,logs,results,browser_data,logs/screenshots}
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR"
 chmod 750 "$INSTALL_DIR"
 chmod 700 "$INSTALL_DIR/browser_data"   # browser profile is sensitive
@@ -180,10 +180,30 @@ success "systemd units installed"
 # ════════════════════════════════════════════════════════════════════════════
 # STEP 9: Firewall configuration
 # ════════════════════════════════════════════════════════════════════════════
-log "Step 9/12 — Configuring UFW firewall..."
+log "Step 9/12 — Configuring firewall..."
+
+# Oracle Cloud VMs ship with iptables rules that block incoming traffic even
+# after you open ports in the OCI Security List. This flush is essential.
+# We reset INPUT to ACCEPT before applying UFW rules.
+if command -v iptables &>/dev/null; then
+    log "  Flushing Oracle Cloud default iptables INPUT restrictions..."
+    iptables -P INPUT ACCEPT
+    iptables -F INPUT
+    # Persist the flush so it survives reboots
+    if command -v netfilter-persistent &>/dev/null; then
+        netfilter-persistent save 2>/dev/null || true
+    elif command -v iptables-save &>/dev/null; then
+        iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+    fi
+    success "  Oracle Cloud iptables restrictions cleared"
+fi
+
+# Install iptables-persistent so flush survives reboots
+apt-get install -y -q iptables-persistent 2>/dev/null || true
+
 ufw allow 22/tcp   comment 'SSH'
 ufw allow 80/tcp   comment 'HTTP (Caddy redirect)'
-ufw allow 443/tcp  comment 'HTTPS (Caddy + Let'\''s Encrypt)'
+ufw allow 443/tcp  comment 'HTTPS (Caddy + Let'"'"'s Encrypt)'
 # Block direct access to the FastAPI port — only Caddy should reach it
 ufw deny  8000/tcp comment 'FastAPI (internal only)'
 ufw --force enable

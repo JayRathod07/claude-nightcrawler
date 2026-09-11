@@ -310,12 +310,30 @@ On 5 consecutive failures: 60s circuit-breaker pause
 | 6 | Notifications & monitoring (Telegram, morning report, health) | ✅ Complete | 31 ✅ |
 | 7 | Testing & QA (integration, load, auth/utils unit tests) | ✅ Complete | 68 ✅ |
 | 8 | Documentation (8 comprehensive docs in `docs/`) | ✅ Complete | — |
+| 9 | Oracle Cloud Deployment (bootstrap, verify, .env.example) | ✅ Complete | — |
 
 **Total: 279 / 279 tests passing** 🟢 (265 core + 14 load)
 
 ---
 
 ## 🚀 Quick Deployment
+
+### Option A — One-Command Bootstrap (Recommended for fresh Oracle Cloud VM)
+
+```bash
+# Clone the repo, then run the interactive bootstrap:
+git clone https://github.com/JayRathod07/claude-nightcrawler.git
+cd claude-nightcrawler
+sudo bash scripts/oracle_bootstrap.sh
+```
+
+The bootstrap script will:
+1. Clear Oracle Cloud iptables restrictions (critical!)
+2. Prompt for your domain, password, and DuckDNS token
+3. Run the full setup (Python, Playwright, Caddy, systemd)
+4. Verify the deployment automatically
+
+### Option B — Manual Step-by-Step
 
 ```bash
 # 1. Clone on your Oracle Cloud server
@@ -330,11 +348,15 @@ nano .env   # set ADMIN_PASSWORD, DOMAIN_NAME, DUCKDNS_TOKEN
 chmod +x scripts/setup.sh
 sudo ./scripts/setup.sh
 
-# 4. One-time Claude login
-source venv/bin/activate
-python scripts/manual_login.py
+# 4. Verify deployment
+chmod +x scripts/verify_deployment.sh
+./scripts/verify_deployment.sh
 
-# 5. Access your dashboard
+# 5. One-time Claude login (requires X11 forwarding: ssh -X ...)
+source /opt/claude-agent/venv/bin/activate
+python /opt/claude-agent/scripts/manual_login.py
+
+# 6. Access your dashboard
 # https://your-agent.duckdns.org
 ```
 

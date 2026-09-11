@@ -52,8 +52,8 @@ browser_data/
 .DS_Store
 Thumbs.db
 
-# Results (optional - may want to track)
-# results/
+# Results (task output files — runtime data, not source code)
+results/
 
 # Testing
 .coverage
